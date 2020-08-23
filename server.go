@@ -4,12 +4,20 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
 	http.HandleFunc("/", mainHandler)
-	if err := http.ListenAndServe("localhost:8080", nil); err != nil {
-		log.Fatal(err)
+	port := os.Getenv("PORT")
+	if port == "" {
+		if err := http.ListenAndServe("localhost:8080", nil); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		if err := http.ListenAndServe(":"+port, nil); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
