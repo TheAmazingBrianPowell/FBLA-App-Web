@@ -112,7 +112,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	m.SetHeader("Subject", "Verify your account!")
 	m.SetBody("text/html", "<!DOCTYPE html><html><head></head><body><h1>Greetings "+name+",</h1><p>Your verification code is: "+verification+"</p><body></html>")
 	d := gomail.NewDialer("smtp.gmail.com", 587, "noreply.fbla.app@gmail.com", os.Getenv("emailPass"))
-	d.TLSConfig = &tls.Config{InsecureSkipVerify: false, ServerName: "https://fbla-app.herokuapp.com"}
+	d.TLSConfig = &tls.Config{InsecureSkipVerify: false, ServerName: "fbla-app.herokuapp.com"}
 
 	if err = d.DialAndSend(m); err != nil {
 		fmt.Println(err)
