@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/smtp"
 	"os"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
+	gomail "gopkg.in/mail.v2"
 )
 
 const contentSecurityPolicyValue = "default-src none;"
@@ -49,6 +49,7 @@ func main() {
 func truncHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
 	_, err := db.Exec("TRUNCATE TABLE users")
+
 	if err != nil {
 		fmt.Println(err)
 		fmt.Fprintf(w, "Uh, that didn't work so well")
@@ -61,7 +62,8 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
 	email := r.FormValue("email")
 	pass := r.FormValue("pass")
-	if email == "" || pass == "" {
+	name := r.FormValue("name")
+	if email == "" || pass == "" || name == "" {
 		fmt.Fprintf(w, "No input")
 		return
 	}
@@ -99,20 +101,22 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("At generateRandomString, createHandler")
 		fmt.Fprintf(w, "An unexpected error occurred")
 	}
-	fmt.Println(string(hash))
-	fmt.Println(verification)
 
-	from := "noreply.fbla.app@gmail.com"
-	auth := smtp.PlainAuth("", from, os.Getenv("emailPass"), "smtp.gmail.com")
-	message := []byte("Your validation code is: " + verification)
-	err = smtp.SendMail("smtp.gmail.com:587", auth, from, []string{email}, message)
-	if err != nil {
+	m := gomail.NewMessage()
+	m.SetAddressHeader("From", "noreply.fbla.app@gmail.com", "FBLA App")
+	m.SetHeader("To", email)
+	m.SetHeader("Subject", "Verify your account!")
+	m.SetBody("text/html", "<!DOCTYPE html><html><head></head><body><h1>Greetings "+name+",</h1><p>Your verification code is: "+verification+"</p><body></html>")
+	d := gomail.NewDialer("smtp.gmail.com", 587, "noreply.fbla.app@gmail.com", os.Getenv("emailPass"))
+	//d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+
+	if err = d.DialAndSend(m); err != nil {
 		fmt.Println(err)
 		fmt.Println("At SendMail, createHandler")
 		fmt.Fprintf(w, "Invalid email")
 		return
 	}
-	_, err = db.Exec(`INSERT INTO users (email, password, verification, firstName, lastName, chapter) VALUES (?, ?, ?, '', '', '')`, email, string(hash), verification)
+	_, err = db.Exec(`INSERT INTO users (email, password, verification, name, chapter) VALUES (?, ?, ?, ?, '')`, email, string(hash), verification, name)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("At Exec, createHandler")
