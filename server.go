@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/tls"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
@@ -10,10 +11,13 @@ import (
 	"os"
 	"time"
 
+	gomail "gopkg.in/mail.v2"
+
 	_ "github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
-	gomail "gopkg.in/mail.v2"
 )
+
+var table = [10]byte{'1', '2', '3', '4', '5', '6', '7', '8', '9', '0'}
 
 const contentSecurityPolicyValue = "default-src none;"
 const contentSecurityPolicy = "Content-Security-Policy"
@@ -95,7 +99,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "An unexpected error occurred")
 		return
 	}
-	verification, err := generateRandomString(6)
+	verification, err := generateVerification()
 	if err != nil {
 		log.Println(err)
 		fmt.Println("At generateRandomString, createHandler")
@@ -108,7 +112,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	m.SetHeader("Subject", "Verify your account!")
 	m.SetBody("text/html", "<!DOCTYPE html><html><head></head><body><h1>Greetings "+name+",</h1><p>Your verification code is: "+verification+"</p><body></html>")
 	d := gomail.NewDialer("smtp.gmail.com", 587, "noreply.fbla.app@gmail.com", os.Getenv("emailPass"))
-	//d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+	d.TLSConfig = &tls.Config{InsecureSkipVerify: false}
 
 	if err = d.DialAndSend(m); err != nil {
 		fmt.Println(err)
@@ -187,8 +191,20 @@ func generateRandomString(n int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	return base64.URLEncoding.EncodeToString(b)[:n], nil
+}
+
+func generateVerification() (string, error) {
+	b := make([]byte, 6)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	for i := 0; i < len(b); i++ {
+		b[i] = table[int(b[i])%len(table)]
+	}
+	fmt.Println(string(b))
+	return string(b)[:6], err
 }
 
 // func getUserInfo(email string) (theUser user, err error) {
