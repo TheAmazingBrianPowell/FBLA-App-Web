@@ -67,8 +67,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
 	email := r.FormValue("email")
 	pass := r.FormValue("pass")
-	name := r.FormValue("name")
-	if email == "" || pass == "" || name == "" {
+	if email == "" || pass == "" {
 		fmt.Fprintf(w, "Invalid input")
 		return
 	}
@@ -77,8 +76,11 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "An unexpected error occurred")
 		return
 	}
-	var verify string
-	rows, err := db.Query("SELECT email FROM users WHERE email = ?", email)
+	var (
+		verify string
+		name2 string
+	)
+	rows, err := db.Query("SELECT name FROM users WHERE email = ?", email)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("At Query, createHandler")
@@ -86,15 +88,20 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
+	name := r.FormValue("name")
 	for rows.Next() {
-		rows.Scan(&verify)
+		rows.Scan(&verify, name2&)
 		if verify != "" {
+			name = name2
 			break
 		}
 		fmt.Fprintf(w, "Email already exists")
 		return
 	}
-
+	if name == "" {
+		fmt.Fprintf(w, "Invalid input")
+		return
+	}
 	// user does not exist, we can create one!
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
@@ -145,11 +152,6 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 	email := r.FormValue("email")
 	pass := r.FormValue("pass")
 	verification := r.FormValue("verify")
-	fmt.Println(email)
-	fmt.Println(pass)
-	fmt.Println(verification)
-	r.ParseForm()
-	log.Println(r.Form)
 	if email == "" || pass == "" || verification == "" {
 		fmt.Fprintf(w, "Invalid input")
 		return
