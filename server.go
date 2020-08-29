@@ -68,7 +68,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	pass := r.FormValue("pass")
 	name := r.FormValue("name")
 	if email == "" || pass == "" || name == "" {
-		fmt.Fprintf(w, "No input")
+		fmt.Fprintf(w, "Invalid input")
 		return
 	}
 	if db == nil {
@@ -76,7 +76,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "An unexpected error occurred")
 		return
 	}
-
+	var verify string
 	rows, err := db.Query("SELECT email FROM users WHERE email = ?", email)
 	if err != nil {
 		fmt.Println(err)
@@ -86,6 +86,10 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	for rows.Next() {
+		rows.Scan(&verify)
+		if verify != "" {
+			break
+		}
 		fmt.Fprintf(w, "Email already exists")
 		return
 	}
@@ -130,6 +134,68 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Success!")
 }
 
+func verifyHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
+	if db == nil {
+		fmt.Println("Error: At db nil, verifyHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	email := r.FormValue("email")
+	pass := r.FormValue("pass")
+	verification := r.FormValue("verify")
+	if email != "" || pass != "" || verification != "" {
+		fmt.Fprintf(w, "Invalid input")
+		return
+	}
+	var (
+		hash          []byte
+		verification2 string
+	)
+
+	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", email)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, verifyHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&hash, &verification2)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, verifyHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+
+	}
+	if hash == nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+	err = bcrypt.CompareHashAndPassword(hash, []byte(pass))
+	if err != nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+	if verification != verification2 {
+		fmt.Fprintf(w, "Incorrect verification code")
+		return
+	}
+
+	_, err = db.Exec("UPDATE users SET verification = ? WHERE email = ?", "", email)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Exec, verifyHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+
+	fmt.Fprintf(w, "Success!")
+}
+
 func checkHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
 	if db == nil {
@@ -140,12 +206,15 @@ func checkHandler(w http.ResponseWriter, r *http.Request) {
 	email := r.FormValue("email")
 	pass := r.FormValue("pass")
 	if email == "" || pass == "" {
-		fmt.Fprintf(w, "No input")
+		fmt.Fprintf(w, "Invalid input")
 		return
 	}
 
-	var hash []byte
-	rows, err := db.Query("SELECT password FROM users WHERE email = ?", email)
+	var (
+		hash         []byte
+		verification string
+	)
+	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", email)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("At Query, checkHandler")
@@ -154,21 +223,26 @@ func checkHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		err := rows.Scan(&hash)
+		err := rows.Scan(&hash, &verification)
 		if err != nil {
 			fmt.Println(err)
 			fmt.Println("At Scan, checkHandler")
 			fmt.Fprintf(w, "An unexpected error occurred")
 			return
 		}
+
 	}
 	if hash == nil {
-		fmt.Fprintf(w, "Error: incorrect password or username")
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+	if verification != "" {
+		fmt.Fprintf(w, "Verification error")
 		return
 	}
 	err = bcrypt.CompareHashAndPassword(hash, []byte(pass))
 	if err != nil {
-		fmt.Fprintf(w, "Error: incorrect password or username")
+		fmt.Fprintf(w, "Incorrect password or username")
 		return
 	}
 	// var (
