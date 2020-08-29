@@ -78,7 +78,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var (
 		verify string
-		name2 string
+		name2  string
 	)
 	rows, err := db.Query("SELECT name FROM users WHERE email = ?", email)
 	if err != nil {
@@ -90,7 +90,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	name := r.FormValue("name")
 	for rows.Next() {
-		rows.Scan(&verify, name2&)
+		rows.Scan(&verify, &name2)
 		if verify != "" {
 			name = name2
 			break
