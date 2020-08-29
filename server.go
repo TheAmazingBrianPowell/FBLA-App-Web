@@ -150,7 +150,7 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(verification)
 	r.ParseForm()
 	log.Println(r.Form)
-	if email != "" || pass != "" || verification != "" {
+	if email == "" || pass == "" || verification == "" {
 		fmt.Fprintf(w, "Invalid input")
 		return
 	}
