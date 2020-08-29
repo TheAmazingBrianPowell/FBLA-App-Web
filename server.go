@@ -80,7 +80,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		verify string
 		name2  string
 	)
-	rows, err := db.Query("SELECT name FROM users WHERE email = ?", email)
+	rows, err := db.Query("SELECT verification, name FROM users WHERE email = ?", email)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("At Query, createHandler")
