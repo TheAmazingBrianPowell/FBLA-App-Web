@@ -35,8 +35,9 @@ func main() {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 
-	http.HandleFunc("/verify", checkHandler)
+	http.HandleFunc("/verify", verifyHandler)
 	http.HandleFunc("/create", createHandler)
+	http.HandleFunc("/check", checkHandler)
 	http.HandleFunc("/truncate", truncHandler)
 	port := os.Getenv("PORT")
 	if port == "" {
