@@ -133,7 +133,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if exists {
-		_, err = db.Exec(`UPDATE users SET (email, password, verification, name) WHERE email = ?`, email, string(hash), verification, name)
+		_, err = db.Exec(`UPDATE users SET (email, password, verification, name) VALUES (?,?,?,?) WHERE email = ?`, email, string(hash), verification, name)
 	} else {
 		_, err = db.Exec(`INSERT INTO users (email, password, verification, name, chapter) VALUES (?, ?, ?, ?, '')`, email, string(hash), verification, name)
 	}
