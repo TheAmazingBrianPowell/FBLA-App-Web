@@ -79,9 +79,8 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		verify string
 		exists = false
-		name2  string
 	)
-	rows, err := db.Query("SELECT verification, name FROM users WHERE email = ?", email)
+	rows, err := db.Query("SELECT verification FROM users WHERE email = ?", email)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("At Query, createHandler")
@@ -91,10 +90,9 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	name := r.FormValue("name")
 	for rows.Next() {
-		rows.Scan(&verify, &name2)
+		rows.Scan(&verify)
 		if verify != "" {
 			exists = true
-			name = name2
 			break
 		}
 		fmt.Fprintf(w, "Email already exists")
@@ -135,7 +133,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if exists {
-		_, err = db.Exec(`UPDATE users SET verification = ? WHERE email = ?`, verification, email)
+		_, err = db.Exec(`UPDATE users SET (email, password, verification, name) WHERE email = ?`, email, string(hash), verification, name)
 	} else {
 		_, err = db.Exec(`INSERT INTO users (email, password, verification, name, chapter) VALUES (?, ?, ?, ?, '')`, email, string(hash), verification, name)
 	}
