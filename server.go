@@ -94,7 +94,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&verify, &name2)
 		if verify != "" {
 			exists = true
-			name2 = name
+			name = name2
 			break
 		}
 		fmt.Fprintf(w, "Email already exists")
