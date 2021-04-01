@@ -39,6 +39,9 @@ func main() {
 	http.HandleFunc("/create", createHandler)
 	http.HandleFunc("/check", checkHandler)
 	http.HandleFunc("/truncate", truncHandler)
+	http.HandleFunc("/createChapter", createChapterHandler)
+	http.HandleFunc("/joinChapter", joinChapterHandler)
+	http.HandleFunc("/report", reportHandler)
 	port := os.Getenv("PORT")
 	if port == "" {
 		if err := http.ListenAndServe("localhost:8080", nil); err != nil {
@@ -51,13 +54,221 @@ func main() {
 	}
 }
 
+func reportHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
+	
+	message := r.FormValue("message")
+
+	if db == nil {
+		fmt.Println("Error: At db nil, reportHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+
+	if message == "" {
+		fmt.Fprintf(w, "Invalid input")
+		return
+	}
+
+	_, err := db.Exec(`INSERT INTO bugs (message) VALUES (?)`, message)
+	if err != nil {
+		fmt.Fprintf(w, "An unexpected error occurred")
+		fmt.Println(err)
+		fmt.Println("At Update, createChapterHandler")
+		return
+	}
+
+	fmt.Fprintf(w, "Success!")
+}
+
+func createChapterHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
+	email := r.FormValue("email")
+	pass := r.FormValue("pass")
+	chapterName := r.FormValue("chapterName")
+
+	if db == nil {
+		fmt.Println("Error: At db nil, createChapterHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+
+	if email == "" || pass == "" || chapterName == "" {
+		fmt.Fprintf(w, "Invalid input")
+		return
+	}
+
+	var (
+		hash         []byte
+		verification string
+	)
+	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", email)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, checkHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&hash, &verification)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, checkHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+
+	}
+	if hash == nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+	if verification != "" {
+		fmt.Fprintf(w, "Verification error")
+		return
+	}
+	err = bcrypt.CompareHashAndPassword(hash, []byte(pass))
+	if err != nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+
+	// generate random chapter code
+	chapterCode, err := generateVerification(10)
+	if err != nil {
+		log.Println(err)
+		fmt.Println("At generateRandomString, createChapterHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	_, err = db.Exec(`INSERT INTO chapters (id, name) VALUES (?, ?)`, chapterCode, chapterName)
+	
+	if err != nil {
+		fmt.Fprintf(w, "An unexpected error occurred")
+		fmt.Println(err)
+		fmt.Println("At Insert, createChapterHandler")
+		return
+	}
+	_, err = db.Exec(`UPDATE users SET chapter = ? WHERE email = ?`, chapterCode, email)
+	if err != nil {
+		fmt.Fprintf(w, "An unexpected error occurred")
+		fmt.Println(err)
+		fmt.Println("At Update, createChapterHandler")
+		return
+	}
+
+	fmt.Fprintf(w, "Success!")
+
+}
+
+func joinChapterHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
+	email := r.FormValue("email")
+	pass := r.FormValue("pass")
+	chapterCode := r.FormValue("chapterCode")
+
+	if db == nil {
+		fmt.Println("Error: At db nil, createHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+
+	if email == "" || pass == "" || chapterCode == "" {
+		fmt.Fprintf(w, "Invalid input")
+		return
+	}
+
+	var (
+		hash         []byte
+		verification string
+	)
+	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", email)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, joinHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&hash, &verification)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, checkHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+
+	}
+	if hash == nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+	if verification != "" {
+		fmt.Fprintf(w, "Verification error")
+		return
+	}
+	err = bcrypt.CompareHashAndPassword(hash, []byte(pass))
+	if err != nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+
+
+	var chapterName string
+	rows, err = db.Query("SELECT name FROM chapters WHERE id = ?", chapterCode)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, checkHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&chapterName)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, checkHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+
+	}
+
+	if chapterName == "" {
+		fmt.Fprintf(w, "There are no chapters with this code")
+		return
+	}
+
+	_, err = db.Exec(`UPDATE users SET chapter = ? WHERE email = ?`, chapterCode, email)
+	if err != nil {
+		fmt.Fprintf(w, "An unexpected error occurred")
+		fmt.Println(err)
+		fmt.Println("At Update, createChapterHandler")
+		return
+	}
+
+	fmt.Fprintf(w, "Success!")
+
+}
+
+
+// for testing purposes only, this function would not be in the final production
 func truncHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
 	_, err := db.Exec("TRUNCATE TABLE users")
 
 	if err != nil {
 		fmt.Println(err)
-		fmt.Fprintf(w, "Uh, that didn't work so well")
+		fmt.Fprintf(w, "Error truncating table users")
+		return
+	}
+	_, err = db.Exec("TRUNCATE TABLE chapters")
+
+	if err != nil {
+		fmt.Println(err)
+		fmt.Fprintf(w, "Error truncating table chapters")
 		return
 	}
 	fmt.Fprintf(w, "Success")
@@ -67,7 +278,8 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
 	email := r.FormValue("email")
 	pass := r.FormValue("pass")
-	if email == "" || pass == "" {
+    isAdvisor := r.FormValue("isAdvisor")
+	if email == "" || pass == "" || isAdvisor == "" {
 		fmt.Fprintf(w, "Invalid input")
 		return
 	}
@@ -111,7 +323,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "An unexpected error occurred")
 		return
 	}
-	verification, err := generateVerification()
+	verification, err := generateVerification(6)
 	if err != nil {
 		log.Println(err)
 		fmt.Println("At generateRandomString, createHandler")
@@ -122,7 +334,7 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 	m.SetAddressHeader("From", "noreply.fbla.app@gmail.com", "FBLA App")
 	m.SetHeader("To", email)
 	m.SetHeader("Subject", "Verify your account!")
-	m.SetBody("text/html", "<!DOCTYPE html><html><head></head><body><h1>Greetings "+name+",</h1><p>Your verification code is: "+verification+"</p><body></html>")
+	m.SetBody("text/html", "<!DOCTYPE html><html><head></head><body><h1>Greetings "+name+",</h1> <p>Your verification code is: "+verification+"</p><body></html>")
 	d := gomail.NewDialer("smtp.gmail.com", 587, "noreply.fbla.app@gmail.com", os.Getenv("emailPass"))
 	d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 
@@ -133,9 +345,9 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if exists {
-		_, err = db.Exec(`UPDATE users SET password = ?, verification = ?, name = ? WHERE email = ?`, string(hash), verification, name, email)
+		_, err = db.Exec(`UPDATE users SET password = ?, isAdvisor = ?, verification = ?, name = ? WHERE email = ?`, string(hash), isAdvisor, verification, name, email)
 	} else {
-		_, err = db.Exec(`INSERT INTO users (email, password, verification, name, chapter) VALUES (?, ?, ?, ?, '')`, email, string(hash), verification, name)
+		_, err = db.Exec(`INSERT INTO users (email, password, isAdvisor, verification, name, chapter) VALUES (?, ?, ?, ?, ?, '')`, email, string(hash), isAdvisor, verification, name)
 	}
 	if err != nil {
 		fmt.Println(err)
@@ -280,8 +492,8 @@ func generateRandomString(n int) (string, error) {
 	return base64.URLEncoding.EncodeToString(b)[:n], nil
 }
 
-func generateVerification() (string, error) {
-	b := make([]byte, 6)
+func generateVerification(length int) (string, error) {
+	b := make([]byte, length)
 	_, err := rand.Read(b)
 	if err != nil {
 		return "", err
@@ -290,7 +502,7 @@ func generateVerification() (string, error) {
 		b[i] = table[int(b[i])%len(table)]
 	}
 	fmt.Println(string(b))
-	return string(b)[:6], err
+	return string(b)[:length], err
 }
 
 // func getUserInfo(email string) (theUser user, err error) {

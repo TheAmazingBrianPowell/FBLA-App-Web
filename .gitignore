@@ -2,3 +2,4 @@
 users/
 *.DS_Store
 FBLA-App
+.env
