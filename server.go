@@ -35,6 +35,8 @@ func main() {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 
+	http.HandleFunc("/getMessages", getMessagesHandler)
+	http.HandleFunc("/sendMessage", sendHandler)
 	http.HandleFunc("/verify", verifyHandler)
 	http.HandleFunc("/create", createHandler)
 	http.HandleFunc("/check", checkHandler)
@@ -44,7 +46,7 @@ func main() {
 	http.HandleFunc("/report", reportHandler)
 	port := os.Getenv("PORT")
 	if port == "" {
-		if err := http.ListenAndServe("localhost:8080", nil); err != nil {
+		if err := http.ListenAndServe(":8080", nil); err != nil {
 			log.Fatal(err)
 		}
 	} else {
@@ -53,6 +55,168 @@ func main() {
 		}
 	}
 }
+
+func getMessagesHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
+	
+	email := r.FormValue("email")
+	pass := r.FormValue("pass")
+	user := r.FormValue("user")
+
+	if db == nil {
+		fmt.Println("Error: At db nil, reportHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+
+	if email == "" || pass == "" || user == "" {
+		fmt.Fprintf(w, "Invalid input")
+		return
+	}
+
+	var (
+		hash         []byte
+		verification string
+	)
+	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", email)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, getMessageHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&hash, &verification)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, getMessageHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+
+	}
+	if hash == nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+	if verification != "" {
+		fmt.Fprintf(w, "Verification error")
+		return
+	}
+	err = bcrypt.CompareHashAndPassword(hash, []byte(pass))
+	if err != nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+
+	var (
+		content string
+		author string
+		outString string
+	)
+	rows, err = db.Query("SELECT content, author FROM messages WHERE (author = ? AND recipient = ?) OR (author = ? AND recipient = ?) ORDER BY time ASC", email, user, user, email)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, getMessageHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&content, &author)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, checkHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+		outString += author + "," + content + ","
+	}
+	if outString != "" {
+		fmt.Fprintf(w, "S" + outString[:len(outString)-1])
+	} else {
+		fmt.Fprintf(w, "S")
+	}
+}
+
+func sendHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
+	
+	content := r.FormValue("content")
+	sender := r.FormValue("sender")
+	pass := r.FormValue("pass")
+	recipient := r.FormValue("recipient")
+	date := r.FormValue("date")
+	
+
+	if db == nil {
+		fmt.Println("Error: At db nil, reportHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+
+	if sender == "" || pass == "" || content == "" || recipient == "" || date == "" {
+		fmt.Fprintf(w, "Invalid input")
+		return
+	}
+
+	var (
+		hash         []byte
+		verification string
+	)
+	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", sender)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, checkHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&hash, &verification)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, checkHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+
+	}
+	if hash == nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+	if verification != "" {
+		fmt.Fprintf(w, "Verification error")
+		return
+	}
+	err = bcrypt.CompareHashAndPassword(hash, []byte(pass))
+	if err != nil {
+		fmt.Fprintf(w, "Incorrect password or username")
+		return
+	}
+
+    _, err = db.Exec(`INSERT INTO messages (content, author, recipient, time) VALUES (?, ?, ?, ?)`, content, sender, recipient, date)
+	if err != nil {
+		fmt.Fprintf(w, "An unexpected error occurred")
+		fmt.Println(err)
+		fmt.Println("At Update, createChapterHandler")
+		return
+	}
+
+	if err != nil {
+		fmt.Fprintf(w, "An unexpected error occurred")
+		fmt.Println(err)
+		fmt.Println("At Update, createChapterHandler")
+		return
+	}
+
+	fmt.Fprintf(w, "Success!")
+
+}
+
+
 
 func reportHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(contentSecurityPolicy, contentSecurityPolicyValue)
@@ -158,6 +322,7 @@ func createChapterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+
 	fmt.Fprintf(w, "Success!")
 
 }
@@ -182,8 +347,9 @@ func joinChapterHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		hash         []byte
 		verification string
+		name		 string
 	)
-	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", email)
+	rows, err := db.Query("SELECT password, verification, name FROM users WHERE email = ?", email)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("At Query, joinHandler")
@@ -192,7 +358,7 @@ func joinChapterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		err := rows.Scan(&hash, &verification)
+		err := rows.Scan(&hash, &verification, &name)
 		if err != nil {
 			fmt.Println(err)
 			fmt.Println("At Scan, checkHandler")
@@ -249,7 +415,33 @@ func joinChapterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Success!")
+		var (
+		name2 string
+		email2 string
+	)
+	rows, err = db.Query("SELECT name, email FROM users WHERE chapter = ?", chapterCode)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, checkHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	var outText = name
+	for rows.Next() {
+		err := rows.Scan(&name2, &email2)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, checkHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+		if name != name2 {
+			outText += "," + name2 + "," + email2
+		}
+
+	}
+	fmt.Fprintf(w, "S" + outText)
 
 }
 
@@ -437,8 +629,10 @@ func checkHandler(w http.ResponseWriter, r *http.Request) {
 	var (
 		hash         []byte
 		verification string
+		name string
+		chapter string
 	)
-	rows, err := db.Query("SELECT password, verification FROM users WHERE email = ?", email)
+	rows, err := db.Query("SELECT password, verification, name, chapter FROM users WHERE email = ?", email)
 	if err != nil {
 		fmt.Println(err)
 		fmt.Println("At Query, checkHandler")
@@ -447,7 +641,7 @@ func checkHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		err := rows.Scan(&hash, &verification)
+		err := rows.Scan(&hash, &verification, &name, &chapter)
 		if err != nil {
 			fmt.Println(err)
 			fmt.Println("At Scan, checkHandler")
@@ -480,7 +674,34 @@ func checkHandler(w http.ResponseWriter, r *http.Request) {
 	// 	}
 	// 	log.Println(name)
 	// }
-	fmt.Fprintf(w, "Success!")
+
+	var (
+		name2 string
+		email2 string
+	)
+	rows, err = db.Query("SELECT name, email FROM users WHERE chapter = ?", chapter)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("At Query, checkHandler")
+		fmt.Fprintf(w, "An unexpected error occurred")
+		return
+	}
+	defer rows.Close()
+	var outText = name
+	for rows.Next() {
+		err := rows.Scan(&name2, &email2)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println("At Scan, checkHandler")
+			fmt.Fprintf(w, "An unexpected error occurred")
+			return
+		}
+		if name != name2 {
+			outText += "," + name2 + "," + email2
+		}
+
+	}
+	fmt.Fprintf(w, "S" + outText)
 }
 
 func generateRandomString(n int) (string, error) {
